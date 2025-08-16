@@ -1,10 +1,14 @@
 # ops-hub
 
-**Daily**
-- Open today’s note in `/daily/` (cmd/ctrl+k → “Create new file”).
+This repo is part of the **GitHub Framework** governed by the
+[governance repo](../governance/).
 
-**Weekly (Fri or Sun)**
-- Review board, roll tasks, update `/weekly/{{week}}.md`.
+**Purpose**
+Logs, daily notes, weekly reviews, and routines.
+
+**Usage**
+- Daily → open today’s note in `/daily`
+- Weekly → review board, update `/weekly/{{week}}.md`
 
 Shortcuts:
 - [templates/daily-note.md](templates/daily-note.md)
