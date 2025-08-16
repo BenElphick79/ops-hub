@@ -1,6 +1,4 @@
-# Daily reset routine
-
-- Clear inboxes (email, chat, tasks)
-- Check calendar & buffer
-- Set Top 3 priorities
-- Quick scan: project boards
+# Daily Reset
+- [ ] Clear inbox.md
+- [ ] Update Projects board
+- [ ] Plan tomorrow's top 1 & important 3
