@@ -1,0 +1,30 @@
+﻿# Power BI
+*.pbix
+*.pbix.temp
+*.tmp
+*.bak
+
+# Excel
+*.xlsx
+*.xlsm
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+
+# Environments
+.venv/
+.env
+
+# Data (block prod data, allow samples)
+data/*.csv
+data/*.xlsx
+!data/samples/**
+
+# Node / Python cache (optional)
+node_modules/
+__pycache__/
