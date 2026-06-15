@@ -45,6 +45,23 @@ A reference for what belongs where. When a new task lands, use this to decide wh
 
 ---
 
+### 🚨 Supply Constraints & Shortages
+**Scope:** Active material shortage management, supplier follow-ups, allocation decisions, and constraint communications.
+
+**Belongs here:**
+- Ingredient/material shortage tracking (e.g. Honey Graham, anything affecting multiple lines)
+- Supplier chase tasks and ETAs
+- Allocation decisions pending or in progress
+- Cross-product impact assessments
+- Internal follow-ups on supply risk (procurement, demand, ops)
+
+**Does not belong here:**
+- The exec communication about the shortage → Stakeholder & Comms
+- The MRP configuration causing a planning signal → Supply Planning / MRP
+- The production schedule change resulting from the shortage → Production Scheduling
+
+---
+
 ### 🏗️ Projects & Initiatives
 **Scope:** Structural, one-off work that improves the function rather than running it. Things with a defined start and end.
 
