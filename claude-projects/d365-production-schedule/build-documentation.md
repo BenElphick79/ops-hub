@@ -21,14 +21,14 @@ Power BI semantic model (dataset)
 Excel workbook table: Table_BatchOrderHeader
    │  Excel.CurrentWorkbook(){[Name="Table_BatchOrderHeader"]}
    ▼
-SRC_BatchOrderHeader  ->  STG_BatchOrderHeader
-   │                        shared base: pool + status scope, date split,
-   │                        renamed, sorted — NO window filter
-   ├─ FCT_BatchOrderHeader              [Phase 2, published]
+SRC_BatchOrderHeader  ->  STG_ProductionSchedule
+   │                        shared base: pool + status scope, stage tag,
+   │                        date split, renamed, sorted — NO window filter
+   ├─ FCT_ProductionSchedule            [Phase 2, published]
    │     + next-week window filter
-   │     + PENDING: exclude Created / Estimated (firmed only)
-   └─ STG_BatchOrderHeaderValidation    [Phase 3 stub]
-         forks upstream of the window filter (sees all time)
+   │     + PENDING: exclude Created / Estimated (firmed only)  ← D4b, still open
+   └─ STG_ProductionScheduleValidation  [Phase 3 stub]
+         forks upstream of the window filter (sees all time, all statuses)
 ```
 
 **Mechanism.** Power Query consumes an in-workbook table that is connected to the
@@ -46,35 +46,53 @@ mechanism. **D1: CLOSED.**
 connection, daily refresh. Whether that leg is Import or DirectQuery (**D3**) is
 not yet confirmed; it affects data freshness but not the build mechanism above.
 
+**Query naming.** The staging / published / validation queries were renamed
+`*BatchOrderHeader` → `*ProductionSchedule` (STG, FCT, validation). `SRC_` keeps
+the `BatchOrderHeader` name (it maps 1:1 to the source table). Names in this
+document track the build.
+
 ---
 
 ## 2. Query lineage (current)
 
-- **SRC_BatchOrderHeader** — reads `Table_BatchOrderHeader`; strips bracketed
-  column names; selects the 9 in-scope columns; sets types (Scheduled Quantity
-  typed as decimal / `type number`).
-- **STG_BatchOrderHeader** — shared base for both forks. Inner-joins
-  `DIM_ProductionPool` (in-scope-pool filter) and `DIM_OrderStatus` (active-status
-  filter); splits scheduled start/end into date + time; selects the final column
-  set via a `SelectColumns` whitelist (positively dropping the nested join columns
-  and the datetime sources); renames to presentation names; sorts by pool then
-  start. **No window filter** — that now lives on the published branch.
-- **FCT_BatchOrderHeader** — published (Phase 2) branch. Source = STG, then the
-  next-week window overlap filter (keeps jobs active at any point in the window,
-  so multi-week spanning jobs are retained). **Pending:** additionally exclude
-  Created / Estimated so only firmed/scheduled work is issued (see Open Items).
-- **STG_BatchOrderHeaderValidation** — Phase 3 stub. Source = STG, forking
-  upstream of the window filter, so it retains Created / Estimated and is not
-  constrained to next-week. Currently time-unbounded (see F5).
-- **PAR_DateRanges** — parameter record; supplies `NextWeekStart` /
-  `NextWeekEnd`. `Granularity` is still emitted but unused, and the header still
-  references the deleted `FNC_GenerateDateTable` — dangling, see Open Items.
-- **DIM_ProductionPool** — hardcoded in-scope pool list (17 pools).
+- **PAR_DateRanges** — parameter record. Computes `NextWeekStart` (Monday of next
+  week) and `NextWeekEnd` (following Sunday) from today. Cleaned: no longer emits
+  `Granularity`; header no longer references the deleted `FNC_GenerateDateTable`.
+- **DIM_ProductionPool** — hardcoded in-scope pool dimension, **now two columns**:
+  `Production Pools` (key) and `Production Type` (material-stage tag). Enter-Data
+  literal (`Table.FromRows` over a compressed row set). **16 pools** (was 17 — the
+  combined CB2&CB3 batch-only pool was removed as redundant; see F6). Stage values:
+  FG / BATCH / PW.
 - **DIM_OrderStatus** — hardcoded active-status list: Created, Estimated,
-  Scheduled, Released, Started (finished/closed excluded).
+  Scheduled, Released, Started (finished/closed excluded). Enter-Data literal.
+- **SRC_BatchOrderHeader** — reads `Table_BatchOrderHeader`; strips bracketed
+  column names; selects the 9 in-scope columns; sets types (`SumScheduledQuantity`
+  typed as `type number` / decimal).
+- **STG_ProductionSchedule** — shared base for both forks. Inner-joins
+  `DIM_ProductionPool` (in-scope-pool filter) and **expands `Production Type`**;
+  inner-joins `DIM_OrderStatus` (active-status filter, expanded nothing — filter
+  only); splits scheduled start/end into date + time via a typed record +
+  `ExpandRecordColumn`; selects the final column set via a `SelectColumns`
+  whitelist (which carries `Production Type` and positively drops the leftover
+  `DIM_OrderStatus` nested column and the datetime sources); renames to
+  presentation names; sorts by pool, then start date, then start time.
+  **No window filter** — that lives on the published branch.
+- **FCT_ProductionSchedule** — published (Phase 2) branch. Source = STG, then the
+  next-week window overlap filter (keeps jobs active at any point in the window,
+  so multi-week spanning jobs are retained). **Pending (D4b):** additionally
+  restrict to firmed/scheduled statuses (drop Created / Estimated) so only firmed
+  work is issued. Not yet implemented as of the 2026-07-11 review (v1.3).
+- **STG_ProductionScheduleValidation** — Phase 3 stub. Source = STG (pass-through),
+  forking upstream of the window filter, so it retains Created / Estimated and is
+  not constrained to next-week. Currently time-unbounded (see F5).
 
 **Grain:** batch-order-header — one row per batch order. Confirmed appropriate
 for Phase 2; matches current practice.
+
+**Output column set (STG, presentation names):** Production Type, Production Pool,
+Batch Order Number, Item Number, Item Name, Delivery Date, Batch Order Status,
+Scheduled Quantity, Scheduled Start Date, Scheduled Start Time, Scheduled End
+Date, Scheduled End Time.
 
 ---
 
@@ -108,7 +126,7 @@ Created, Estimated, Scheduled, Released, Started (finished/closed excluded);
 both forks inherit it. Published branch (FCT) must additionally exclude
 Created + Estimated so only firmed/scheduled work is issued. Validation branch
 retains Created + Estimated to flag "exists but not scheduled" as a safeguard.
-The FCT exclusion is NOT yet implemented — see Open Items. Same whitelist
+The FCT exclusion is NOT yet implemented — see Open Items (D4b). Same whitelist
 pattern as pools, so the same silent-drop on any unlisted status value.
 
 F5 — Fork architecture: window filter moved to the published branch.
@@ -117,15 +135,34 @@ The next-week window overlap filter was moved out of STG into FCT (published).
 STG is now the shared, unfiltered base; the validation fork sits upstream of
 the window filter, so it is not boxed into next-week. Consequence: validation
 currently draws off a time-unbounded set — Phase 3 will want its own broader
-window (rolling / not-yet-finished), not zero window. Also this turn: the
-DIM_OrderStatus leftover nested-join column was fixed by switching STG cleanup
-to a SelectColumns whitelist; and the date-spine infra (FNC_GenerateDateTable,
-DIM_Datetable) was removed as ahead-of-phase — may return in Phase 3.
+window (rolling / not-yet-finished), not zero window. Also: the DIM_OrderStatus
+leftover nested-join column is dropped via the STG SelectColumns whitelist; and
+the date-spine infra (FNC_GenerateDateTable, DIM_Datetable) was removed as
+ahead-of-phase — may return in Phase 3.
 
-(register candidate) DIM_ProductionPool inner join confirmed as an intentional
-in-scope-pool filter, 17 pools, hardcoded. Residual: a genuinely new in-scope
-pool drops silently until the dimension is updated — possible Phase 3
-"unlisted pool" detector, not built.
+F6 — DIM_ProductionPool second column: material-stage tag. [2026-07-11]
+DIM_ProductionPool gains [Production Type], a coarse material-stage code per
+pool: FG (finished goods), BATCH (intermediate), PW (pre-weigh). Grain = pool;
+one stage per pool, holds by construction (single value per row). Serves the
+§7 coarse echelon indicator required in Phase 2; does NOT discharge the Phase 3
+reservation/pegging multi-echelon linkage — F2 stands. The column reaches the
+raw output via the STG DIM-join expand (Production Type) + the SelectColumns
+whitelist; it is the leading output column and is not renamed. In-scope pools
+now 16 (was 17): the combined CB2&CB3 batch-only pool was removed as redundant,
+its orders present under CB2/CB3 individually — confirmed nothing hidden. G03
+tagged FG (corrected; previously mis-scoped as intermediate). Embedded 16-row
+Enter-Data table verified against the agreed map on 2026-07-11. Intended
+downstream use — a three-sheet split of the distribution workbook by stage
+(FG / BATCH / PW) — is Phase 3 (final distribution table), not built in Phase 2.
+
+F7 — Label register: FG / BATCH / PW are floor vernacular on a stage axis.
+  [2026-07-11]
+The [Production Type] values and the column axis were confirmed as material
+stage, but the value codes (FG/BATCH/PW) are shop-floor terms. "BATCH" as a
+stage value is a process word standing in for "intermediate", and the whole
+table is batch orders, so it invites conflation for a general reader. Kept
+deliberately for now (owner's call). Flagged for a friendly-display-label
+revisit when the Phase 3 distribution presentation is designed — see Open Items.
 ```
 
 ---
@@ -135,13 +172,33 @@ pool drops silently until the dimension is updated — possible Phase 3
 ```
 BLOCKS PHASE 2 COMPLETION
 - D4b — FCT (published) must exclude Created + Estimated (issue firmed /
-  scheduled only). Not yet implemented. Requires confirmation it is resolved
-  before Phase 2 sign-off.
+  scheduled only). STILL NOT IMPLEMENTED as of the 2026-07-11 review (v1.3):
+  FCT_ProductionSchedule applies the next-week window filter only. Fix is a
+  firmed-status whitelist appended to FCT:
+      FilteredRowsFirmedOnly = Table.SelectRows(
+          FilteredRowsNextWeekOverlap,
+          each List.Contains({"Scheduled","Released","Started"},
+              [Batch Order Status]))
+  Requires confirmation it is resolved before Phase 2 sign-off.
+
+- §7 linkage — parent/reference order half not met (conscious, per F2). The
+  Production Type stage column satisfies the §7 coarse echelon indicator. The
+  parent/reference-order half is not in the raw output because it lives in
+  reservations/pegging (F2), which is Phase 3. Scope §7 wording amended to
+  reflect this split so Phase 2 sign-off is not blocked by an un-buildable
+  requirement. Confirm the amended §7 is accepted at sign-off.
 
 NON-BLOCKING
 - D3 — D365 -> dataset leg: Import vs DirectQuery unconfirmed (freshness only).
-- Finalisation sweep — PAR_DateRanges still emits Granularity and its header
-  references the deleted FNC_GenerateDateTable; clear both. Query four-line
-  headers and step-name prefix standardisation are deferred to the Claude Code
-  finalisation pass on GitHub upload.
+- F7 label register — revisit friendly display labels for FG/BATCH/PW (and the
+  column name) when the Phase 3 distribution presentation is designed. "BATCH"
+  will not read as "intermediate" to a general audience.
+- Finalisation sweep — PAR_DateRanges dangling refs now CLEARED. Remaining:
+  most queries still lack the mandatory 4-line header block, and step names are
+  Power Query defaults (ChangedType, RemovedOtherColumns, etc.). Header +
+  step-name-prefix standardisation deferred to the Claude Code finalisation
+  pass on GitHub upload.
+- DIM key naming — DIM_ProductionPool key column is "Production Pools" (plural)
+  vs the output's "Production Pool" (singular). Harmless (never collide); tidy
+  in the finalisation pass if desired.
 ```
