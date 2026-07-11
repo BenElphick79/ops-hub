@@ -4,7 +4,7 @@
 **Owner:** Ben (Supply Planning Manager)
 **Entity in scope:** AXF (manufacturing / supply)
 **MRP engine:** Planning Optimization
-**Last updated:** 2026-07-10
+**Last updated:** 2026-07-11
 
 ---
 
@@ -50,6 +50,10 @@ To be included on the distribution table / cover of every issued schedule:
 
 Rationale: this reframes every future "but the schedule said X" from an owner error into a stale-copy problem — which is the honest framing anyway. It also hedges the tension of distributing "in writing" while the primary scheduling process is still stabilising.
 
+> **Multi-sheet note (Phase 3):** the Phase 3 distribution workbook is split into
+> separate stage sheets (see §5 / §7). Each sheet is separately forwardable, so
+> the caveat must travel on **every distributed sheet**, not only a cover tab.
+
 ---
 
 ## 5. Phasing
@@ -58,16 +62,26 @@ Rationale: this reframes every future "but the schedule said X" from an owner er
 |---|---|---|---|
 | **1** | Scope design | This document | Strawman agreed; open decisions logged. Stays open to ongoing development. |
 | **2** | MVP build | Refresh → raw output table(s) | A schedule that refreshes and outputs table(s) in the expected **raw** structure, fields and content. **No validations. No flags. No shiny.** |
-| **3** | Validation design & build | Raw table + flag tables + final distribution table | A schedule that refreshes and outputs the expected **final** structure with all validations applied. |
+| **3** | Validation design & build | Raw table + flag tables + final distribution table | A schedule that refreshes and outputs the expected **final** structure with all validations applied, split into stage sheets for distribution. |
 
 ### Phase 2 guardrail (on record, at owner's request)
 Phase 2 is raw output only. No validation logic, no flags, no tweaks, no "while I'm in here" additions. **This guardrail is to be enforced even against the owner's own scope creep during Phase 2.**
+
+Note: the `Production Type` material-stage column (added to DIM_ProductionPool in
+Phase 2) is **not** a guardrail breach — it is the coarse echelon indicator §7
+already requires in Phase 2 (see §7). What is deferred to Phase 3 is any *use* of
+that column to split, format, or shape the distribution output.
 
 ### Phase 3 output architecture
 Phase 3 is expected to comprise:
 1. The Phase 2 **raw output** table(s).
 2. **Validation flag table(s)** — each holds *only* the rows that trip a given check.
-3. The **final distribution table** — clean, formatted, caveated.
+3. The **final distribution table** — clean, formatted, caveated — **split into
+   stage sheets** using the `Production Type` column: **Finished Goods (FG)**,
+   **Intermediate/Batch (BATCH)**, **Pre-Weigh (PW)**. Most consumers read only
+   the FG sheet (finished-good timing); PW/BATCH are of interest to a narrower
+   audience. Once the stage column rides on the raw output, each sheet is a
+   one-line filter — no new build is needed in Phase 2 to enable this.
 
 **Confidence gate:** when every validation flag table is empty, the owner can be confident (as far as automated checks allow) that the final distribution table is clean. "All tables clear" is the go/no-go signal for issue.
 
@@ -80,13 +94,13 @@ D365 F&SCM
    │  (direct connection, daily refresh)
    ▼
 Power BI dataset  ── single upstream source of truth for the export
-   │  (Power Query connection — mechanism TBD, see §8 open decision D1)
+   │  (connected in-workbook table -> Power Query; D1 CLOSED, see build doc)
    ▼
 Excel (Power Query ETL)
    │
-   ├─ Raw output table(s)            [Phase 2]
+   ├─ Raw output table(s)            [Phase 2]   (carries Production Type stage tag)
    ├─ Validation flag table(s)       [Phase 3]
-   └─ Final distribution table       [Phase 3]
+   └─ Final distribution table       [Phase 3]   (split into FG / BATCH / PW sheets)
 ```
 
 **Cadence:** issue **weekly**; retain the ability to refresh **daily** for validation runs at the owner's discretion.
@@ -108,6 +122,9 @@ Excel (Power Query ETL)
 - Resource / work centre — one of: CB2, CB3, CB4, CM2, CM3, CM4, G01, G02, G03, G08, G09, Y04, Y05
 - Production Pool
 - Production Area
+- **Production Type (material stage)** — FG / BATCH / PW, one label per pool via
+  DIM_ProductionPool. Added Phase 2. Doubles as the §7 echelon indicator (below)
+  and as the Phase 3 stage-split key (§5). See build doc F6.
 
 **Timing**
 - Scheduled start (date/time)
@@ -122,11 +139,22 @@ Excel (Power Query ETL)
 **Status**
 - Production order status (e.g. Created / Estimated / Scheduled / Released / Started / Reported as finished)
 
-**Linkage — REQUIRED IN PHASE 2 to enable Phase 3 checks**
-- BOM level / echelon indicator
-- Parent / reference order (linkage across multi-resource, multi-echelon productions)
+**Linkage — enables Phase 3 checks**
+- **BOM level / echelon indicator** — **SATISFIED in Phase 2** by the
+  `Production Type` stage column (coarse level: PW → BATCH → FG). This is a coarse
+  echelon marker, not full pegging.
+- **Parent / reference order (linkage across multi-resource, multi-echelon
+  productions)** — **DEFERRED to Phase 3.** At batch-order-header grain there is
+  no direct parent field; this linkage lives in reservations/pegging (build doc
+  F2). It is therefore not present in the Phase 2 raw output, and the Phase 3
+  "missing job in a multi-echelon production" check depends on reservation data
+  not currently in scope.
 
-> ⚠️ **Design dependency:** the linkage fields above must be present in the Phase 2 raw output even though Phase 2 builds no validation. Phase 3's "missing job in a multi-echelon production" check cannot function without them. Omitting them in Phase 2 forces a Phase 2 rework later.
+> ⚠️ **Design note (reconciled 2026-07-11):** the earlier requirement to carry
+> *both* linkage fields in Phase 2 has been split. The coarse echelon indicator
+> is met now (via Production Type); the parent/reference-order linkage is a Phase 3
+> reservations job (F2) and does not block Phase 2 sign-off. Date-based Phase 3
+> checks (past-due, delivery-vs-scheduled) are unaffected — viable at header grain.
 
 ---
 
@@ -136,12 +164,13 @@ Nothing below is assumed as fact — logged for the owner to confirm.
 
 | ID | Item | Status / question |
 |---|---|---|
-| **D1** | Excel ↔ Power BI dataset connection mechanism | Not yet decided. Three viable routes, each with different transform freedom: **(a)** live connection to published semantic model — least M-transform freedom, PivotTable-style; **(b)** DAX query pulled via Power Query — good balance, shapeable, but you own the DAX; **(c)** export/flat table then transform — most M freedom, least "live." Resolve at Phase 2 kickoff; it constrains the entire ETL design. |
+| **D1** | Excel ↔ Power BI dataset connection mechanism | **CLOSED.** Connected in-workbook table → Power Query via `Excel.CurrentWorkbook`. XMLA/Analysis Services route assessed and closed as not viable in this environment. See build doc F1. |
 | **D2** | Raw field set (§7) | Proposed strawman only. Confirm against actual dataset fields. |
-| **D3** | Dataset connection type (D365 → Power BI) | Stated as "direct connection, daily refreshed." Confirm whether DirectQuery or scheduled Import, as it affects freshness and refresh behaviour. |
-| **D4** | Order scope | Which order states are in scope for distribution? Firmed/released only, or including planned? (Assumption: firmed production orders — confirm.) |
-| **D5** | Distribution format & channel | Excel file emailed? SharePoint? Confirm at Phase 2. Affects how the caveat is surfaced. |
+| **D3** | Dataset connection type (D365 → Power BI) | Stated as "direct connection, daily refreshed." Confirm whether DirectQuery or scheduled Import, as it affects freshness and refresh behaviour. Non-blocking. |
+| **D4** | Order scope | **Split by branch.** STG applies active-status scope (Created, Estimated, Scheduled, Released, Started). Published (FCT) must additionally issue firmed only (drop Created + Estimated) — **D4b, still open**, blocks Phase 2 sign-off (build doc Open Items). Validation branch retains all active statuses as a safeguard. |
+| **D5** | Distribution format & channel | Excel file emailed? SharePoint? Confirm at Phase 2. Affects how the caveat is surfaced — note it must travel on each stage sheet (§4). |
 | **D6** | Validation classes | Design in Phase 3 (see §9). Not built before then. |
+| **D7** | Stage label register | `Production Type` values FG / BATCH / PW are floor vernacular on a material-stage axis (build doc F7). Revisit friendly display labels for the general audience when the Phase 3 distribution presentation is designed. Non-blocking. |
 
 ---
 
@@ -151,7 +180,7 @@ Placeholders captured from the owner's intent. Each becomes a flag table in Phas
 
 - **Job overlap** — do two jobs overlap on the same resource?
 - **Delivery vs scheduled date** — is the delivery/need-by date within *X* days of the scheduled date? (X to be defined.)
-- **Missing job — multi-resource / multi-echelon** — is an expected job absent across a linked, multi-level production? (Depends on §7 linkage fields.)
+- **Missing job — multi-resource / multi-echelon** — is an expected job absent across a linked, multi-level production? (Depends on the parent/reference-order linkage deferred in §7 — i.e. on reservation/pegging data not yet in scope.)
 - **Sequence validation** — is the job sequence on a resource valid / gapped?
 - **Past-due** — scheduled or delivery date already in the past relative to refresh.
 
@@ -165,4 +194,5 @@ Each check should, where it recurs, feed back into upstream config remediation (
 - Distributing validation outputs to anyone but the owner.
 - Write-back to D365 from Excel.
 - Automated corrections (checks flag; the human corrects in-system).
-- Anything shiny in Phase 2.
+- Anything shiny in Phase 2 — including *using* the Production Type column to
+  split or format output (that is the Phase 3 distribution sheet, not Phase 2).
