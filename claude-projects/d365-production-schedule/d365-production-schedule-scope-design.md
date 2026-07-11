@@ -155,6 +155,7 @@ Excel (Power Query ETL)
 > is met now (via Production Type); the parent/reference-order linkage is a Phase 3
 > reservations job (F2) and does not block Phase 2 sign-off. Date-based Phase 3
 > checks (past-due, delivery-vs-scheduled) are unaffected — viable at header grain.
+> **Split accepted by owner 2026-07-11.**
 
 ---
 
@@ -167,7 +168,7 @@ Nothing below is assumed as fact — logged for the owner to confirm.
 | **D1** | Excel ↔ Power BI dataset connection mechanism | **CLOSED.** Connected in-workbook table → Power Query via `Excel.CurrentWorkbook`. XMLA/Analysis Services route assessed and closed as not viable in this environment. See build doc F1. |
 | **D2** | Raw field set (§7) | Proposed strawman only. Confirm against actual dataset fields. |
 | **D3** | Dataset connection type (D365 → Power BI) | Stated as "direct connection, daily refreshed." Confirm whether DirectQuery or scheduled Import, as it affects freshness and refresh behaviour. Non-blocking. |
-| **D4** | Order scope | **Split by branch.** STG applies active-status scope (Created, Estimated, Scheduled, Released, Started). Published (FCT) must additionally issue firmed only (drop Created + Estimated) — **D4b, still open**, blocks Phase 2 sign-off (build doc Open Items). Validation branch retains all active statuses as a safeguard. |
+| **D4** | Order scope | **Split by branch. CLOSED.** STG applies active-status scope (Created, Estimated, Scheduled, Released, Started). Published (FCT) additionally issues firmed only — excludes Created + Estimated (D4b, resolved 2026-07-11; build doc F8). Validation branch retains all active statuses as a safeguard. |
 | **D5** | Distribution format & channel | Excel file emailed? SharePoint? Confirm at Phase 2. Affects how the caveat is surfaced — note it must travel on each stage sheet (§4). |
 | **D6** | Validation classes | Design in Phase 3 (see §9). Not built before then. |
 | **D7** | Stage label register | `Production Type` values FG / BATCH / PW are floor vernacular on a material-stage axis (build doc F7). Revisit friendly display labels for the general audience when the Phase 3 distribution presentation is designed. Non-blocking. |
