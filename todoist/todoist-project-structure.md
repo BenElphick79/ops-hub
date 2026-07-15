@@ -108,6 +108,24 @@ A reference for what belongs where. When a new task lands, use this to decide wh
 
 **Does not belong here:**
 - Anything that's actually operational — be honest with yourself and file it properly
+- Master data fix records / value-add capture → Value-Add Log
+
+---
+
+### 📈 Value-Add Log
+**Scope:** A record of master data improvements and fixes made outside the daily planning grind — quick, low-friction capture for work that's real value-add but wouldn't otherwise be visible. Feeds the monthly supply review as an input. This is a log, not an action list — entries are informational records, not tasks with a next step.
+
+**Belongs here:**
+- One-line entries recording a completed master data fix: item/config, what changed, why it mattered (optional)
+- Format: `[ItemCode] – [what changed] – [why it mattered, optional]`
+- Nothing else — this project holds records only
+
+**Does not belong here:**
+- The actual investigation or troubleshooting work → Supply Planning / MRP or Production Scheduling (whichever applies)
+- Anything still in progress → stays in its operational project until done, then gets logged here as a closed record
+- Comms about the fix to leadership → Stakeholder & Comms
+
+**Handling rule:** Close each entry immediately on creation — it's a record, not something to action later. At month-end, pull the project's completed tasks via Reporting (filtered to this project) and hand them over for summarising into the supply review.
 
 ---
 
